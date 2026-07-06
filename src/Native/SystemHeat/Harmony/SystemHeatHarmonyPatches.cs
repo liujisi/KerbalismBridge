@@ -42,6 +42,21 @@ namespace KerbalismNative
 			LogMetals("(string,double,flow,bool)", __instance, resourceName, 0, demand, __result);
 	}
 
+	/// <summary>Traces Kerbalism broker Produce calls to find Metals source in the broker system.</summary>
+	[HarmonyPatch(typeof(KERBALISM.ResourceCache), "Produce", typeof(Vessel), typeof(string), typeof(double), typeof(KERBALISM.ResourceBroker))]
+	internal static class Patch_ResourceCache_Produce
+	{
+		private static int logLimit = 20;
+		private static void Prefix(Vessel v, string resource_name, double quantity, KERBALISM.ResourceBroker broker)
+		{
+			if (resource_name != "Metals" || quantity <= 0.0 || logLimit <= 0) return;
+			logLimit--;
+			BridgeUtils.Log("[zKerbalismNative] Kerbalism PRODUCE Metals qty=" + quantity
+				+ " broker=" + (broker != null ? broker.Title : "null")
+				+ "\n" + System.Environment.StackTrace);
+		}
+	}
+
 	[HarmonyPatch(typeof(ModuleSystemHeatFissionReactor), "HandleResourceActivities")]
 	internal static class Patch_FissionReactor_HandleResourceActivities
 	{

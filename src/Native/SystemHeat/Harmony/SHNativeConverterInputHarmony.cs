@@ -7,6 +7,74 @@ using KerbalismBridge;
 namespace KerbalismNative
 {
 	/// <summary>
+	/// Tracks whether we are inside a Kerbalism-owned SystemHeat converter FixedUpdateFlight.
+	/// Used by PartRequestResource interceptor to detect stock converter resource IO.
+	/// </summary>
+	internal static class KerbalismSHConverterContext
+	{
+		internal static bool Active;
+		internal static string ConverterName;
+		internal static string ModuleID;
+		internal static string PartName;
+		internal static int DiagCounter;
+
+		internal static void Enter(ModuleSystemHeatConverter c)
+		{
+			Active = true;
+			ConverterName = c.ConverterName;
+			ModuleID = c.moduleID;
+			PartName = c.part?.partInfo?.name ?? "?";
+		}
+
+		internal static void Leave()
+		{
+			Active = false;
+			ConverterName = null;
+			ModuleID = null;
+			PartName = null;
+		}
+	}
+
+	[HarmonyPatch(typeof(Part), nameof(Part.RequestResource), typeof(string), typeof(double))]
+	internal static class Patch_Part_RequestResource_String_Double
+	{
+		[HarmonyPrefix]
+		private static bool Prefix(Part __instance, string resourceName, double amount, ref double __result)
+		{
+			if (!KerbalismSHConverterContext.Active) return true;
+			if (KerbalismSHConverterContext.DiagCounter < 30)
+			{
+				KerbalismSHConverterContext.DiagCounter++;
+				BridgeUtils.Log("[zKerbalismNative] RR-SD " + resourceName
+					+ " amt=" + amount
+					+ " conv=" + KerbalismSHConverterContext.ConverterName
+					+ " part=" + KerbalismSHConverterContext.PartName);
+			}
+			return true;
+		}
+	}
+
+	[HarmonyPatch(typeof(Part), nameof(Part.RequestResource), typeof(int), typeof(double))]
+	internal static class Patch_Part_RequestResource_Int_Double
+	{
+		[HarmonyPrefix]
+		private static bool Prefix(Part __instance, int resourceID, double amount, ref double __result)
+		{
+			if (!KerbalismSHConverterContext.Active) return true;
+			if (KerbalismSHConverterContext.DiagCounter < 30)
+			{
+				KerbalismSHConverterContext.DiagCounter++;
+				var def = PartResourceLibrary.Instance.GetDefinition(resourceID);
+				BridgeUtils.Log("[zKerbalismNative] RR-ID " + (def?.name ?? resourceID.ToString())
+					+ " amt=" + amount
+					+ " conv=" + KerbalismSHConverterContext.ConverterName
+					+ " part=" + KerbalismSHConverterContext.PartName);
+			}
+			return true;
+		}
+	}
+
+	/// <summary>
 	/// While Kerbalism owns SH native converter/harvester resource IO, hide input rates from stock
 	/// ModuleResourceConverter input checks (ratio × fixedDeltaTime) so high timewarp does not stop modules.
 	/// </summary>
@@ -88,12 +156,12 @@ namespace KerbalismNative
 	[HarmonyPatch(typeof(ModuleSystemHeatConverter), "FixedUpdateFlight")]
 	internal static class Patch_SystemHeatConverter_FixedUpdateFlight
 	{
-		private static int _diagCounter;
 		private static void Prefix(ModuleSystemHeatConverter __instance, ref SHNativeConverterInputHarmony.InputListRateBackup __state)
 		{
 			if (!SHNativeConverterInputHarmony.ShouldZeroInputs(__instance))
 				return;
 
+			KerbalismSHConverterContext.Enter(__instance);
 			__state = SHNativeConverterInputHarmony.ZeroInputList(__instance.inputList);
 		}
 
@@ -103,20 +171,7 @@ namespace KerbalismNative
 				return;
 
 			SHNativeConverterInputHarmony.RestoreInputList(__instance.inputList, ref __state);
-
-			if (_diagCounter < 5)
-			{
-				double metals = 0;
-				if (__instance.part != null)
-				{
-					var pr = __instance.part.Resources["Metals"];
-					if (pr != null) metals = pr.amount;
-				}
-				BridgeUtils.Log("[zKerbalismNative] FUF Postfix: " + __instance.ConverterName
-					+ " lastTimeFactor=" + __instance.lastTimeFactor
-					+ " partMetals=" + metals);
-				_diagCounter++;
-			}
+			KerbalismSHConverterContext.Leave();
 		}
 	}
 

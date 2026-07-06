@@ -7,6 +7,9 @@ namespace KerbalismNative
 {
 	internal static class SHNativeConverterResourceSim
 	{
+		private const string TAG = "[zKerbalismDebug] ";
+		private static Dictionary<string, double> _lastLogTime = new Dictionary<string, double>();
+
 		internal static string AddLoadedConverterRates(
 			ModuleSystemHeatConverter converter,
 			string brokerTitle,
@@ -21,24 +24,34 @@ namespace KerbalismNative
 			if (!converter.IsActivated || !converter.ModuleIsActive())
 				return brokerTitle;
 
-			double scale = converter.GetHeatThrottle();
-			if (scale <= double.Epsilon)
+			double heatScale = converter.GetHeatThrottle();
+			if (heatScale <= double.Epsilon)
 				return brokerTitle;
 
-			double inputScale = GetInputAvailabilityScale(converter.vessel, converter.inputList, availableResources, scale);
+			double inputScale = GetInputAvailabilityScale(converter.vessel, converter.inputList, availableResources, heatScale);
 			if (inputScale <= double.Epsilon)
+			{
+				DebugLog(converter, heatScale, inputScale, 0, 0);
 				return brokerTitle;
+			}
 
 			double efficiency = GetConverterEfficiency(converter);
-			double outputScale = GetOutputAvailabilityScale(converter.vessel, converter.outputList, efficiency, scale);
+			double outputScale = GetOutputAvailabilityScale(converter.vessel, converter.outputList, efficiency, heatScale);
 			if (outputScale <= double.Epsilon)
+			{
+				DebugLog(converter, heatScale, inputScale, outputScale, 0);
 				return brokerTitle;
+			}
 
-			double finalScale = scale * System.Math.Min(inputScale, outputScale);
+			double finalScale = heatScale * System.Math.Min(inputScale, outputScale);
 			if (finalScale <= double.Epsilon)
+			{
+				DebugLog(converter, heatScale, inputScale, outputScale, 0);
 				return brokerTitle;
+			}
 
 			converter.lastTimeFactor = 1.0;
+			DebugLog(converter, heatScale, inputScale, outputScale, finalScale);
 
 			foreach (ResourceRatio input in converter.inputList)
 				resourceChangeRequest.Add(new KeyValuePair<string, double>(input.ResourceName, -input.Ratio * finalScale));
@@ -47,6 +60,27 @@ namespace KerbalismNative
 				resourceChangeRequest.Add(new KeyValuePair<string, double>(output.ResourceName, efficiency * output.Ratio * finalScale));
 
 			return brokerTitle;
+		}
+
+		private static void DebugLog(ModuleSystemHeatConverter converter, double heatScale, double inputScale, double outputScale, double finalScale)
+		{
+			string key = converter.part != null ? converter.part.persistentId.ToString() : "0";
+			double now = Planetarium.GetUniversalTime();
+			double lastTime;
+			if (_lastLogTime.TryGetValue(key, out lastTime) && now - lastTime < 1.0)
+				return;
+			_lastLogTime[key] = now;
+
+			string partName = "?";
+			try { partName = converter.part.partInfo.name; } catch { }
+
+			KerbalismBridge.BridgeUtils.Log(TAG + partName + " " + converter.moduleID
+				+ " act=" + converter.IsActivated
+				+ " heatScale=" + heatScale.ToString("F3")
+				+ " inScale=" + inputScale.ToString("F3")
+				+ " outScale=" + outputScale.ToString("F3")
+				+ " finalScale=" + finalScale.ToString("F3")
+				+ " ltf=" + converter.lastTimeFactor);
 		}
 
 		private static double GetInputAvailabilityScale(Vessel vessel, List<ResourceRatio> inputList, Dictionary<string, double> availableResources, double scale)
@@ -84,6 +118,9 @@ namespace KerbalismNative
 			if (outputList == null || outputList.Count == 0)
 				return 1d;
 
+			if (efficiency <= double.Epsilon)
+				return 0d;
+
 			VesselResources vesselResources = vessel != null ? KERBALISM.ResourceCache.Get(vessel) : null;
 			if (vesselResources == null)
 				return 1d;
@@ -94,12 +131,22 @@ namespace KerbalismNative
 				if (output.DumpExcess)
 					continue;
 
+				if (output.Ratio <= double.Epsilon)
+					continue;
+
+				double requiredRate = efficiency * output.Ratio * scale;
+				if (requiredRate <= double.Epsilon)
+					continue;
+
 				ResourceInfo resource = vesselResources.GetResource(vessel, output.ResourceName);
 				if (resource == null)
 					continue;
 
 				double availableRoom = resource.Capacity - (resource.Amount + resource.Deferred);
-				double limit = availableRoom / (efficiency * output.Ratio * scale);
+				if (availableRoom <= double.Epsilon)
+					return 0d;
+
+				double limit = availableRoom / requiredRate;
 				outputScale = System.Math.Min(outputScale, limit);
 				if (outputScale <= double.Epsilon)
 					return 0d;

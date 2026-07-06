@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using HarmonyLib;
 using KERBALISM;
@@ -16,13 +17,11 @@ namespace KerbalismNative
 	{
 		private static bool Prefix(ModuleSystemHeatConverter __instance)
 		{
-			if (!SHNativeConverterInputHarmony.ShouldZeroInputs(__instance))
-				return true; // not owned by Kerbalism, let original run
+			if (!SHNativeConverterInputHarmony.ShouldBlockStockIO(__instance))
+				return true;
 
-			// 0. Update PAW event visibility (normally done by BaseConverter.UpdateConverterStatus)
-			Traverse.Create(__instance).Method("UpdateConverterStatus").GetValue();
+			SHConverterReflection.SafeCall(__instance, "UpdateConverterStatus");
 
-			// 1. heatModule check (disable if missing)
 			var heatModule = Traverse.Create(__instance).Field("heatModule").GetValue();
 			if (heatModule == null)
 			{
@@ -30,27 +29,22 @@ namespace KerbalismNative
 				return false;
 			}
 
-			// 2. Overheat check (keeps safety shutdown)
-			Traverse.Create(__instance).Method("CheckOverheat").GetValue();
+			SHConverterReflection.SafeCall(__instance, "CheckOverheat");
 
-			// 3. AlwaysActive forces IsActivated
 			if (__instance.AlwaysActive && !__instance.IsActivated)
 			{
 				__instance.IsActivated = true;
-				Traverse.Create(__instance).Method("UpdateConverterStatus").GetValue();
+				SHConverterReflection.SafeCall(__instance, "UpdateConverterStatus");
 			}
 
-			// 4. Disable if inactive
 			if (!__instance.IsActivated && !__instance.AlwaysActive)
 			{
 				__instance.enabled = false;
 				return false;
 			}
 
-			// 5. Push heat via UpdateFlux using lastTimeFactor (preserves heat management)
-			Traverse.Create(__instance).Method("UpdateFlux", __instance.lastTimeFactor).GetValue();
+			SHConverterReflection.SafeCall(__instance, "UpdateFlux", __instance.lastTimeFactor);
 
-			// Skip base.FixedUpdate() — no stock resource IO, no phantom production
 			return false;
 		}
 	}
@@ -60,10 +54,10 @@ namespace KerbalismNative
 	{
 		private static bool Prefix(ModuleSystemHeatHarvester __instance)
 		{
-			if (!SHNativeConverterInputHarmony.ShouldZeroInputs(__instance))
+			if (!SHNativeConverterInputHarmony.ShouldBlockStockIO(__instance))
 				return true;
 
-			Traverse.Create(__instance).Method("UpdateConverterStatus").GetValue();
+			SHConverterReflection.SafeCall(__instance, "UpdateConverterStatus");
 
 			var heatModule = Traverse.Create(__instance).Field("heatModule").GetValue();
 			if (heatModule == null)
@@ -72,12 +66,12 @@ namespace KerbalismNative
 				return false;
 			}
 
-			Traverse.Create(__instance).Method("CheckOverheat").GetValue();
+			SHConverterReflection.SafeCall(__instance, "CheckOverheat");
 
 			if (__instance.AlwaysActive && !__instance.IsActivated)
 			{
 				__instance.IsActivated = true;
-				Traverse.Create(__instance).Method("UpdateConverterStatus").GetValue();
+				SHConverterReflection.SafeCall(__instance, "UpdateConverterStatus");
 			}
 
 			if (!__instance.IsActivated && !__instance.AlwaysActive)
@@ -86,18 +80,53 @@ namespace KerbalismNative
 				return false;
 			}
 
-			Traverse.Create(__instance).Method("UpdateFlux", __instance.lastTimeFactor).GetValue();
+			SHConverterReflection.SafeCall(__instance, "UpdateFlux", __instance.lastTimeFactor);
 
 			return false;
 		}
 	}
 
+	/// <summary>Safe reflection calls with error logging for SystemHeat internal methods.</summary>
+	internal static class SHConverterReflection
+	{
+		private static void LogError(PartModule module, string methodName, Exception ex)
+		{
+			string partName = "?";
+			try { partName = module?.part?.partInfo?.name ?? "?"; } catch { }
+			string convId = "?";
+			try
+			{
+				if (module is ModuleSystemHeatConverter c) convId = c.moduleID;
+				else if (module is ModuleSystemHeatHarvester h) convId = h.moduleID;
+			}
+			catch { }
+			UnityEngine.Debug.LogError("[KerbalismBridge] SystemHeat " + methodName + " failed: " +
+				"type=" + (module?.GetType().Name ?? "?") +
+				" part=" + partName +
+				" moduleID=" + convId +
+				" ex=" + ex.Message);
+		}
+
+		public static void SafeCall(PartModule module, string methodName, params object[] args)
+		{
+			try
+			{
+				Traverse.Create(module).Method(methodName, args).GetValue();
+			}
+			catch (Exception ex)
+			{
+				LogError(module, methodName, ex);
+			}
+		}
+	}
+
 	/// <summary>
-	/// Helper — detects if this converter/harvester is owned by Kerbalism.
+	/// Detects if this converter/harvester is owned by Kerbalism and should have
+	/// stock resource IO blocked.
 	/// </summary>
 	internal static class SHNativeConverterInputHarmony
 	{
-		internal static bool ShouldZeroInputs(PartModule module)
+		internal static bool ShouldBlockStockIO(PartModule module)
 		{
 			if (module == null || module.part == null || !Lib.IsFlight())
 				return false;

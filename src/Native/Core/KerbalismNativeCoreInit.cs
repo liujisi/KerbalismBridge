@@ -1,12 +1,12 @@
-using KerbalismBridge;
-
 namespace KerbalismNative
 {
+	/// <summary>
+	/// Called by zKerbalismPluginHost after zKerbalismNative.dll is loaded (requires Bridge + Kerbalism).
+	/// </summary>
 	public static class KerbalismNativeCoreInit
 	{
 		public static void Initialize()
 		{
-			BridgeUtils.Log("[zKerbalismNative] v1.0.8-smelter-debug-2 loaded");
 			KerbalismNativeHarmony.ApplyPatches();
 		}
 	}

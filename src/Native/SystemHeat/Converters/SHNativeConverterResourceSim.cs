@@ -17,9 +17,12 @@ namespace KerbalismNative
 			Dictionary<string, double> availableResources,
 			List<KeyValuePair<string, double>> resourceChangeRequest)
 		{
+			if (converter == null)
+				return brokerTitle;
+
 			converter.lastTimeFactor = 0.0;
 
-			if (converter == null || !converter.IsActivated || !converter.ModuleIsActive())
+			if (!converter.IsActivated || !converter.ModuleIsActive())
 				return brokerTitle;
 
 			double scale = converter.GetHeatThrottle();
@@ -77,9 +80,12 @@ namespace KerbalismNative
 			Dictionary<string, double> availableResources,
 			List<KeyValuePair<string, double>> resourceChangeRequest)
 		{
+			if (harvester == null)
+				return brokerTitle;
+
 			harvester.lastTimeFactor = 0.0;
 
-			if (harvester == null || !harvester.IsActivated || !harvester.ModuleIsActive())
+			if (!harvester.IsActivated || !harvester.ModuleIsActive())
 				return brokerTitle;
 
 			double scale = harvester.GetHeatThrottle();

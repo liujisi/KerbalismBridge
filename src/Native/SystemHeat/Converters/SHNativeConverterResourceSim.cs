@@ -5,10 +5,6 @@ using KerbalismBridge;
 
 namespace KerbalismNative
 {
-	/// <summary>
-	/// Kerbalism resource rates for native SystemHeat converter/harvester modules
-	/// (resource IO blocked via Harmony, heat flux driven by broker state).
-	/// </summary>
 	internal static class SHNativeConverterResourceSim
 	{
 		internal static string AddLoadedConverterRates(
@@ -83,7 +79,6 @@ namespace KerbalismNative
 			return System.Math.Min(1d, inputScale);
 		}
 
-		/// <summary>Checks non-dump output storage capacity. Returns 0 if any non-dump output is full.</summary>
 		private static double GetOutputAvailabilityScale(Vessel vessel, List<ResourceRatio> outputList, double efficiency, double scale)
 		{
 			if (outputList == null || outputList.Count == 0)
@@ -133,69 +128,6 @@ namespace KerbalismNative
 
 			double inputScale = GetInputAvailabilityScale(harvester.vessel, harvester.inputList, availableResources, scale);
 			if (inputScale <= double.Epsilon)
-				return brokerTitle;
-
-			double abundance = BridgeUtils.SampleResourceAbundance(harvester.vessel, harvester);
-			if (abundance <= harvester.HarvestThreshold)
-				return brokerTitle;
-
-			harvester.lastTimeFactor = 1.0;
-
-			foreach (ResourceRatio input in harvester.inputList)
-				resourceChangeRequest.Add(new KeyValuePair<string, double>(input.ResourceName, -input.Ratio * scale));
-
-			resourceChangeRequest.Add(new KeyValuePair<string, double>(harvester.ResourceName, abundance * harvester.Efficiency * scale));
-
-			return brokerTitle;
-		}
-
-		private static double GetInputAvailabilityScale(Vessel vessel, List<ResourceRatio> inputList, Dictionary<string, double> availableResources, double scale)
-		{
-			if (availableResources == null || inputList == null || inputList.Count == 0)
-				return 1d;
-
-			VesselResources vesselResources = vessel != null ? KERBALISM.ResourceCache.Get(vessel) : null;
-			double inputScale = 1d;
-			foreach (ResourceRatio input in inputList)
-			{
-				if (input.Ratio <= double.Epsilon)
-					continue;
-
-				double available;
-				if (vesselResources != null)
-				{
-					ResourceInfo resource = vesselResources.GetResource(vessel, input.ResourceName);
-					available = resource.Amount + resource.Deferred;
-				}
-				else if (!availableResources.TryGetValue(input.ResourceName, out available))
-					return 0d;
-
-				double limit = available / (input.Ratio * scale);
-				inputScale = System.Math.Min(inputScale, limit);
-				if (inputScale <= double.Epsilon)
-					return 0d;
-			}
-
-			return System.Math.Min(1d, inputScale);
-		}
-
-		internal static string AddLoadedHarvesterRates(
-			ModuleSystemHeatHarvester harvester,
-			string brokerTitle,
-			Dictionary<string, double> availableResources,
-			List<KeyValuePair<string, double>> resourceChangeRequest)
-		{
-			if (harvester == null)
-				return brokerTitle;
-
-			harvester.lastTimeFactor = 0.0;
-
-			if (!harvester.IsActivated || !harvester.ModuleIsActive())
-				return brokerTitle;
-
-			double scale = harvester.GetHeatThrottle();
-			scale *= GetInputAvailabilityScale(harvester.vessel, harvester.inputList, availableResources, scale);
-			if (scale <= double.Epsilon)
 				return brokerTitle;
 
 			double abundance = BridgeUtils.SampleResourceAbundance(harvester.vessel, harvester);

@@ -40,6 +40,7 @@ namespace KerbalismNative
 			return SHNativeConverterResourceSim.AddLoadedHarvesterRates(
 				FindHarvesterModule(),
 				brokerTitle,
+				availableResources,
 				resourceChangeRequest);
 		}
 

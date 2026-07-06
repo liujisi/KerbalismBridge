@@ -10,36 +10,93 @@ namespace KerbalismNative
 	/// </summary>
 	internal static class SHNativeConverterResourceSim
 	{
+		private const string LOG_TAG = "[zKerbalismNative] ";
+
 		internal static string AddLoadedConverterRates(
 			ModuleSystemHeatConverter converter,
 			string brokerTitle,
+			Dictionary<string, double> availableResources,
 			List<KeyValuePair<string, double>> resourceChangeRequest)
 		{
 			if (converter == null || !converter.IsActivated || !converter.ModuleIsActive())
 				return brokerTitle;
 
-			double scale = converter.lastTimeFactor * converter.GetHeatThrottle();
+			double scale = converter.GetHeatThrottle();
 			if (scale <= double.Epsilon)
+			{
+				BridgeUtils.Log(LOG_TAG + "Converter " + converter.ConverterName + " heatThrottle=" + scale + " — skipping");
 				return brokerTitle;
+			}
 
+			double inputScale = GetInputAvailabilityScale(converter.vessel, converter.inputList, availableResources, scale);
+			scale *= inputScale;
+			if (scale <= double.Epsilon)
+			{
+				BridgeUtils.Log(LOG_TAG + "Converter " + converter.ConverterName
+					+ " moduleID=" + converter.moduleID
+					+ " blocked: inputScale=" + inputScale
+					+ " heatThrottle=" + converter.GetHeatThrottle());
+				return brokerTitle;
+			}
+
+			double efficiency = GetConverterEfficiency(converter);
 			foreach (ResourceRatio input in converter.inputList)
 				resourceChangeRequest.Add(new KeyValuePair<string, double>(input.ResourceName, -input.Ratio * scale));
 
 			foreach (ResourceRatio output in converter.outputList)
-				resourceChangeRequest.Add(new KeyValuePair<string, double>(output.ResourceName, GetConverterEfficiency(converter) * output.Ratio * scale));
+			{
+				double qty = efficiency * output.Ratio * scale;
+				resourceChangeRequest.Add(new KeyValuePair<string, double>(output.ResourceName, qty));
+				BridgeUtils.Log(LOG_TAG + "Converter " + converter.ConverterName
+					+ " output " + output.ResourceName + " qty=" + qty);
+			}
 
 			return brokerTitle;
 		}
 
+		private static double GetInputAvailabilityScale(Vessel vessel, List<ResourceRatio> inputList, Dictionary<string, double> availableResources, double scale)
+		{
+			if (availableResources == null || inputList == null || inputList.Count == 0)
+				return 1d;
+
+			VesselResources vesselResources = vessel != null ? KERBALISM.ResourceCache.Get(vessel) : null;
+			double inputScale = 1d;
+			foreach (ResourceRatio input in inputList)
+			{
+				if (input.Ratio <= double.Epsilon)
+					continue;
+
+				double available;
+				if (vesselResources != null)
+				{
+					ResourceInfo resource = vesselResources.GetResource(vessel, input.ResourceName);
+					available = resource.Amount + resource.Deferred;
+				}
+				else if (!availableResources.TryGetValue(input.ResourceName, out available))
+					return 0d;
+
+				double limit = available / (input.Ratio * scale);
+				BridgeUtils.Log(LOG_TAG + "  input " + input.ResourceName
+					+ " available=" + available
+					+ " ratio=" + input.Ratio + " scale=" + scale + " limit=" + limit);
+				inputScale = System.Math.Min(inputScale, limit);
+				if (inputScale <= double.Epsilon)
+					return 0d;
+			}
+
+			return System.Math.Min(1d, inputScale);
+		}
 		internal static string AddLoadedHarvesterRates(
 			ModuleSystemHeatHarvester harvester,
 			string brokerTitle,
+			Dictionary<string, double> availableResources,
 			List<KeyValuePair<string, double>> resourceChangeRequest)
 		{
 			if (harvester == null || !harvester.IsActivated || !harvester.ModuleIsActive())
 				return brokerTitle;
 
-			double scale = harvester.lastTimeFactor * harvester.GetHeatThrottle();
+			double scale = harvester.GetHeatThrottle();
+			scale *= GetInputAvailabilityScale(harvester.vessel, harvester.inputList, availableResources, scale);
 			if (scale <= double.Epsilon)
 				return brokerTitle;
 

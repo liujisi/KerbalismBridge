@@ -29,25 +29,25 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Assembly-CSharp">
-      <HintPath>..\..\..\00. KSP DEVELOP PLUGINS\Assembly-CSharp.dll</HintPath>
+      <HintPath>..\..\..\..\KSPDLL\KSP_x64_Data\Assembly-CSharp.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Kerbalism">
-      <HintPath>..\..\..\00. KSP DEVELOP PLUGINS\0. OtherPlugins\Kerbalism.dll</HintPath>
+      <HintPath>..\..\..\..\KSPDLL\others\Kerbalism.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="SystemHeat">
-      <HintPath>..\..\..\00. KSP DEVELOP PLUGINS\0. OtherPlugins\SystemHeat.dll</HintPath>
+      <HintPath>..\..\..\..\KSPDLL\others\SystemHeat.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine">
-      <HintPath>..\..\..\00. KSP DEVELOP PLUGINS\UnityEngine.dll</HintPath>
+      <HintPath>..\..\..\..\KSPDLL\KSP_x64_Data\UnityEngine.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath>..\..\..\00. KSP DEVELOP PLUGINS\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>..\..\..\..\KSPDLL\KSP_x64_Data\UnityEngine.CoreModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
   </ItemGroup>

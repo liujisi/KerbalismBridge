@@ -19,7 +19,9 @@ namespace KerbalismNative
 			if (!SHNativeConverterInputHarmony.ShouldZeroInputs(__instance))
 				return true; // not owned by Kerbalism, let original run
 
-			// -- Replicate FixedUpdateFlight without the stock resource IO --
+			// 0. Update PAW event visibility (normally done by BaseConverter.UpdateConverterStatus)
+			Traverse.Create(__instance).Method("UpdateConverterStatus").GetValue();
+
 			// 1. heatModule check (disable if missing)
 			var heatModule = Traverse.Create(__instance).Field("heatModule").GetValue();
 			if (heatModule == null)
@@ -31,14 +33,21 @@ namespace KerbalismNative
 			// 2. Overheat check (keeps safety shutdown)
 			Traverse.Create(__instance).Method("CheckOverheat").GetValue();
 
-			// 3. Disable if inactive
+			// 3. AlwaysActive forces IsActivated
+			if (__instance.AlwaysActive && !__instance.IsActivated)
+			{
+				__instance.IsActivated = true;
+				Traverse.Create(__instance).Method("UpdateConverterStatus").GetValue();
+			}
+
+			// 4. Disable if inactive
 			if (!__instance.IsActivated && !__instance.AlwaysActive)
 			{
 				__instance.enabled = false;
 				return false;
 			}
 
-			// 4. Push heat via UpdateFlux using lastTimeFactor (preserves heat management)
+			// 5. Push heat via UpdateFlux using lastTimeFactor (preserves heat management)
 			Traverse.Create(__instance).Method("UpdateFlux", __instance.lastTimeFactor).GetValue();
 
 			// Skip base.FixedUpdate() — no stock resource IO, no phantom production
@@ -54,6 +63,8 @@ namespace KerbalismNative
 			if (!SHNativeConverterInputHarmony.ShouldZeroInputs(__instance))
 				return true;
 
+			Traverse.Create(__instance).Method("UpdateConverterStatus").GetValue();
+
 			var heatModule = Traverse.Create(__instance).Field("heatModule").GetValue();
 			if (heatModule == null)
 			{
@@ -62,6 +73,12 @@ namespace KerbalismNative
 			}
 
 			Traverse.Create(__instance).Method("CheckOverheat").GetValue();
+
+			if (__instance.AlwaysActive && !__instance.IsActivated)
+			{
+				__instance.IsActivated = true;
+				Traverse.Create(__instance).Method("UpdateConverterStatus").GetValue();
+			}
 
 			if (!__instance.IsActivated && !__instance.AlwaysActive)
 			{

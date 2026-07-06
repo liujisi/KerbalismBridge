@@ -29,17 +29,122 @@ namespace KerbalismNative
 			if (scale <= double.Epsilon)
 				return brokerTitle;
 
-			scale *= GetInputAvailabilityScale(converter.vessel, converter.inputList, availableResources, scale);
-			if (scale <= double.Epsilon)
+			double inputScale = GetInputAvailabilityScale(converter.vessel, converter.inputList, availableResources, scale);
+			if (inputScale <= double.Epsilon)
+				return brokerTitle;
+
+			double efficiency = GetConverterEfficiency(converter);
+			double outputScale = GetOutputAvailabilityScale(converter.vessel, converter.outputList, efficiency, scale);
+			if (outputScale <= double.Epsilon)
+				return brokerTitle;
+
+			double finalScale = scale * System.Math.Min(inputScale, outputScale);
+			if (finalScale <= double.Epsilon)
 				return brokerTitle;
 
 			converter.lastTimeFactor = 1.0;
 
 			foreach (ResourceRatio input in converter.inputList)
-				resourceChangeRequest.Add(new KeyValuePair<string, double>(input.ResourceName, -input.Ratio * scale));
+				resourceChangeRequest.Add(new KeyValuePair<string, double>(input.ResourceName, -input.Ratio * finalScale));
 
 			foreach (ResourceRatio output in converter.outputList)
-				resourceChangeRequest.Add(new KeyValuePair<string, double>(output.ResourceName, GetConverterEfficiency(converter) * output.Ratio * scale));
+				resourceChangeRequest.Add(new KeyValuePair<string, double>(output.ResourceName, efficiency * output.Ratio * finalScale));
+
+			return brokerTitle;
+		}
+
+		private static double GetInputAvailabilityScale(Vessel vessel, List<ResourceRatio> inputList, Dictionary<string, double> availableResources, double scale)
+		{
+			if (availableResources == null || inputList == null || inputList.Count == 0)
+				return 1d;
+
+			VesselResources vesselResources = vessel != null ? KERBALISM.ResourceCache.Get(vessel) : null;
+			double inputScale = 1d;
+			foreach (ResourceRatio input in inputList)
+			{
+				if (input.Ratio <= double.Epsilon)
+					continue;
+
+				double available;
+				if (vesselResources != null)
+				{
+					ResourceInfo resource = vesselResources.GetResource(vessel, input.ResourceName);
+					available = resource.Amount + resource.Deferred;
+				}
+				else if (!availableResources.TryGetValue(input.ResourceName, out available))
+					return 0d;
+
+				double limit = available / (input.Ratio * scale);
+				inputScale = System.Math.Min(inputScale, limit);
+				if (inputScale <= double.Epsilon)
+					return 0d;
+			}
+
+			return System.Math.Min(1d, inputScale);
+		}
+
+		/// <summary>Checks non-dump output storage capacity. Returns 0 if any non-dump output is full.</summary>
+		private static double GetOutputAvailabilityScale(Vessel vessel, List<ResourceRatio> outputList, double efficiency, double scale)
+		{
+			if (outputList == null || outputList.Count == 0)
+				return 1d;
+
+			VesselResources vesselResources = vessel != null ? KERBALISM.ResourceCache.Get(vessel) : null;
+			if (vesselResources == null)
+				return 1d;
+
+			double outputScale = 1d;
+			foreach (ResourceRatio output in outputList)
+			{
+				if (output.DumpExcess)
+					continue;
+
+				ResourceInfo resource = vesselResources.GetResource(vessel, output.ResourceName);
+				if (resource == null)
+					continue;
+
+				double availableRoom = resource.Capacity - (resource.Amount + resource.Deferred);
+				double limit = availableRoom / (efficiency * output.Ratio * scale);
+				outputScale = System.Math.Min(outputScale, limit);
+				if (outputScale <= double.Epsilon)
+					return 0d;
+			}
+
+			return System.Math.Min(1d, outputScale);
+		}
+
+		internal static string AddLoadedHarvesterRates(
+			ModuleSystemHeatHarvester harvester,
+			string brokerTitle,
+			Dictionary<string, double> availableResources,
+			List<KeyValuePair<string, double>> resourceChangeRequest)
+		{
+			if (harvester == null)
+				return brokerTitle;
+
+			harvester.lastTimeFactor = 0.0;
+
+			if (!harvester.IsActivated || !harvester.ModuleIsActive())
+				return brokerTitle;
+
+			double scale = harvester.GetHeatThrottle();
+			if (scale <= double.Epsilon)
+				return brokerTitle;
+
+			double inputScale = GetInputAvailabilityScale(harvester.vessel, harvester.inputList, availableResources, scale);
+			if (inputScale <= double.Epsilon)
+				return brokerTitle;
+
+			double abundance = BridgeUtils.SampleResourceAbundance(harvester.vessel, harvester);
+			if (abundance <= harvester.HarvestThreshold)
+				return brokerTitle;
+
+			harvester.lastTimeFactor = 1.0;
+
+			foreach (ResourceRatio input in harvester.inputList)
+				resourceChangeRequest.Add(new KeyValuePair<string, double>(input.ResourceName, -input.Ratio * scale));
+
+			resourceChangeRequest.Add(new KeyValuePair<string, double>(harvester.ResourceName, abundance * harvester.Efficiency * scale));
 
 			return brokerTitle;
 		}

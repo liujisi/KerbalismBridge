@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using HarmonyLib;
 using KERBALISM;
 using SystemHeat;
+using KerbalismBridge;
 
 namespace KerbalismNative
 {

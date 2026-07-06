@@ -17,9 +17,9 @@ namespace KerbalismNative
 
 			// Register individual patch classes so one failure doesn't abort others.
 			// 'false' arguments below disable selected patches for troubleshooting.
-			bool enableConverterPostProcess  = false;
+			bool enableConverterPostProcess  = true;
 			bool enableHarvesterPostProcess  = true;
-			bool enableFixedUpdateFlight     = true;
+			bool enableFixedUpdateFlight     = false;
 			bool enableFissionReactor        = true;
 			bool enableFissionDoCatchup      = true;
 

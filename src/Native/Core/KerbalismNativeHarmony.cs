@@ -15,14 +15,21 @@ namespace KerbalismNative
 			patchesApplied = true;
 			var harmony = new Harmony("KerbalismNative");
 
-			// Register individual patch classes so one failure doesn't abort others.
-			// 'false' arguments below disable selected patches for troubleshooting.
 			bool enableConverterPostProcess   = true;
 			bool enableHarvesterPostProcess   = true;
-			bool enableConverterFixedUpdate = true;
+			bool enableConverterFixedUpdate   = true;
 			bool enableHarvesterFixedUpdate   = true;
 			bool enableFissionReactor         = true;
 			bool enableFissionDoCatchup       = true;
+			bool enableRRDiag                 = true;
+
+			if (enableRRDiag)
+			{
+				TryPatch(harmony, typeof(Patch_Part_RequestResource_String_Double), true);
+				TryPatch(harmony, typeof(Patch_Part_RequestResource_Int_Double), true);
+				TryPatch(harmony, typeof(Patch_Part_RequestResource_String_Double_Flow_Bool), true);
+				TryPatch(harmony, typeof(Patch_Part_RequestResource_Int_Double_Flow_Bool), true);
+			}
 
 			TryPatch(harmony, typeof(Patch_FissionReactor_HandleResourceActivities), enableFissionReactor);
 			TryPatch(harmony, typeof(Patch_FissionReactor_DoCatchup), enableFissionDoCatchup);
@@ -31,10 +38,11 @@ namespace KerbalismNative
 			TryPatch(harmony, typeof(Patch_SystemHeatConverter_FixedUpdateFlight), enableConverterFixedUpdate);
 			TryPatch(harmony, typeof(Patch_SystemHeatHarvester_FixedUpdateFlight), enableHarvesterFixedUpdate);
 
-			BridgeUtils.Log("Native core Layer B Harmony patches applied (converterFixedUpdate=" + enableConverterFixedUpdate
-				+ " harvesterFixedUpdate=" + enableHarvesterFixedUpdate
-				+ " converterPostProcess=" + enableConverterPostProcess
-				+ " harvesterPostProcess=" + enableHarvesterPostProcess + ")");
+			BridgeUtils.Log("Native core Layer B Harmony patches applied (converterFUF=" + enableConverterFixedUpdate
+				+ " harvestFUF=" + enableHarvesterFixedUpdate
+				+ " convPP=" + enableConverterPostProcess
+				+ " harvPP=" + enableHarvesterPostProcess
+				+ " rrDiag=" + enableRRDiag + ")");
 		}
 
 		private static void TryPatch(Harmony harmony, Type patchType, bool enabled)

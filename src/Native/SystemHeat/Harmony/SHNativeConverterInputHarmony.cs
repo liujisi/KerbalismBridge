@@ -16,7 +16,8 @@ namespace KerbalismNative
 		internal static string ConverterName;
 		internal static string ModuleID;
 		internal static string PartName;
-		internal static int DiagCounter;
+		internal static int ContextLogCounter;
+		internal static int RequestResourceLogCounter;
 
 		internal static void Enter(ModuleSystemHeatConverter c)
 		{
@@ -24,16 +25,16 @@ namespace KerbalismNative
 			ConverterName = c.ConverterName;
 			ModuleID = c.moduleID;
 			PartName = c.part?.partInfo?.name ?? "?";
-			if (DiagCounter < 10)
+			if (ContextLogCounter < 10)
 			{
-				DiagCounter++;
+				ContextLogCounter++;
 				BridgeUtils.Log("[zKerbalismNative] CTX Enter conv=" + ConverterName + " moduleID=" + ModuleID + " part=" + PartName);
 			}
 		}
 
 		internal static void Leave()
 		{
-			if (DiagCounter < 10)
+			if (ContextLogCounter < 10)
 			{
 				BridgeUtils.Log("[zKerbalismNative] CTX Leave conv=" + ConverterName + " moduleID=" + ModuleID);
 			}
@@ -41,6 +42,17 @@ namespace KerbalismNative
 			ConverterName = null;
 			ModuleID = null;
 			PartName = null;
+		}
+
+		internal static bool IsRelevant(string name)
+		{
+			return name == "Metals" || name == "ScrapMetal" || name == "LiquidFuel" || name == "Oxidizer" || name == "MetallicOre";
+		}
+
+		internal static bool IsRelevant(int id)
+		{
+			var def = PartResourceLibrary.Instance.GetDefinition(id);
+			return def != null && IsRelevant(def.name);
 		}
 	}
 
@@ -51,9 +63,11 @@ namespace KerbalismNative
 		private static bool Prefix(Part __instance, string resourceName, double amount, ref double __result)
 		{
 			if (!KerbalismSHConverterContext.Active) return true;
-			KerbalismSHConverterContext.DiagCounter++;
-			if (KerbalismSHConverterContext.DiagCounter <= 30)
+			if (KerbalismSHConverterContext.RequestResourceLogCounter < 100 && KerbalismSHConverterContext.IsRelevant(resourceName))
+			{
+				KerbalismSHConverterContext.RequestResourceLogCounter++;
 				BridgeUtils.Log("[zKerbalismNative] RR-SD " + resourceName + " amt=" + amount + " conv=" + KerbalismSHConverterContext.ConverterName + " part=" + KerbalismSHConverterContext.PartName);
+			}
 			return true;
 		}
 	}
@@ -65,9 +79,9 @@ namespace KerbalismNative
 		private static bool Prefix(Part __instance, int resourceID, double amount, ref double __result)
 		{
 			if (!KerbalismSHConverterContext.Active) return true;
-			KerbalismSHConverterContext.DiagCounter++;
-			if (KerbalismSHConverterContext.DiagCounter <= 30)
+			if (KerbalismSHConverterContext.RequestResourceLogCounter < 100 && KerbalismSHConverterContext.IsRelevant(resourceID))
 			{
+				KerbalismSHConverterContext.RequestResourceLogCounter++;
 				var def = PartResourceLibrary.Instance.GetDefinition(resourceID);
 				BridgeUtils.Log("[zKerbalismNative] RR-ID " + (def?.name ?? resourceID.ToString()) + " amt=" + amount + " conv=" + KerbalismSHConverterContext.ConverterName + " part=" + KerbalismSHConverterContext.PartName);
 			}
@@ -82,9 +96,11 @@ namespace KerbalismNative
 		private static bool Prefix(Part __instance, string resourceName, double amount, ResourceFlowMode flowMode, bool ignoreFlow, ref double __result)
 		{
 			if (!KerbalismSHConverterContext.Active) return true;
-			KerbalismSHConverterContext.DiagCounter++;
-			if (KerbalismSHConverterContext.DiagCounter <= 30)
+			if (KerbalismSHConverterContext.RequestResourceLogCounter < 100 && KerbalismSHConverterContext.IsRelevant(resourceName))
+			{
+				KerbalismSHConverterContext.RequestResourceLogCounter++;
 				BridgeUtils.Log("[zKerbalismNative] RR-S4 " + resourceName + " amt=" + amount + " flow=" + flowMode + " ignoreFlow=" + ignoreFlow + " conv=" + KerbalismSHConverterContext.ConverterName + " part=" + KerbalismSHConverterContext.PartName);
+			}
 			return true;
 		}
 	}
@@ -96,9 +112,9 @@ namespace KerbalismNative
 		private static bool Prefix(Part __instance, int resourceID, double amount, ResourceFlowMode flowMode, bool ignoreFlow, ref double __result)
 		{
 			if (!KerbalismSHConverterContext.Active) return true;
-			KerbalismSHConverterContext.DiagCounter++;
-			if (KerbalismSHConverterContext.DiagCounter <= 30)
+			if (KerbalismSHConverterContext.RequestResourceLogCounter < 100 && KerbalismSHConverterContext.IsRelevant(resourceID))
 			{
+				KerbalismSHConverterContext.RequestResourceLogCounter++;
 				var def = PartResourceLibrary.Instance.GetDefinition(resourceID);
 				BridgeUtils.Log("[zKerbalismNative] RR-I4 " + (def?.name ?? resourceID.ToString()) + " amt=" + amount + " flow=" + flowMode + " ignoreFlow=" + ignoreFlow + " conv=" + KerbalismSHConverterContext.ConverterName + " part=" + KerbalismSHConverterContext.PartName);
 			}

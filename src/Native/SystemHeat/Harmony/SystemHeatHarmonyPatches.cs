@@ -51,8 +51,68 @@ namespace KerbalismNative
 		{
 			if (resource_name != "Metals" || quantity <= 0.0 || logLimit <= 0) return;
 			logLimit--;
-			BridgeUtils.Log("[zKerbalismNative] Kerbalism PRODUCE Metals qty=" + quantity
+			BridgeUtils.Log("[zKerbalismNative] Produce STATIC Metals qty=" + quantity
 				+ " broker=" + (broker != null ? broker.Title : "null")
+				+ "\n" + System.Environment.StackTrace);
+		}
+	}
+
+	[HarmonyPatch(typeof(KERBALISM.VesselResources), "Produce")]
+	internal static class Patch_VesselResources_Produce
+	{
+		private static int logLimit = 20;
+		private static void Prefix(KERBALISM.VesselResources __instance, Vessel v, string resource_name, double quantity, KERBALISM.ResourceBroker broker)
+		{
+			if (resource_name != "Metals" || quantity <= 0.0 || logLimit <= 0) return;
+			logLimit--;
+			BridgeUtils.Log("[zKerbalismNative] Produce INSTANCE Metals qty=" + quantity
+				+ " broker=" + (broker != null ? broker.Title : "null")
+				+ "\n" + System.Environment.StackTrace);
+		}
+	}
+
+	[HarmonyPatch(typeof(KERBALISM.ResourceInfo), "Produce")]
+	internal static class Patch_ResourceInfo_Produce
+	{
+		private static int logLimit = 20;
+		private static void Prefix(KERBALISM.ResourceInfo __instance, double quantity, KERBALISM.ResourceBroker broker)
+		{
+			if (__instance.ResourceName != "Metals" || quantity <= 0.0 || logLimit <= 0) return;
+			logLimit--;
+			BridgeUtils.Log("[zKerbalismNative] ResourceInfo.Produce Metals qty=" + quantity
+				+ " broker=" + (broker != null ? broker.Title : "null")
+				+ "\n" + System.Environment.StackTrace);
+		}
+	}
+
+	[HarmonyPatch(typeof(KERBALISM.ResourceInfo), "Consume")]
+	internal static class Patch_ResourceInfo_Consume
+	{
+		private static int logLimit = 20;
+		private static void Prefix(KERBALISM.ResourceInfo __instance, double quantity, KERBALISM.ResourceBroker broker)
+		{
+			if (__instance.ResourceName != "Metals" || logLimit <= 0) return;
+			logLimit--;
+			BridgeUtils.Log("[zKerbalismNative] ResourceInfo.Consume Metals qty=" + quantity
+				+ " broker=" + (broker != null ? broker.Title : "null")
+				+ "\n" + System.Environment.StackTrace);
+		}
+	}
+
+	/// <summary>Catches ANY direct write to PartResource.amount, including from Kerbalism Sync wrappers.</summary>
+	[HarmonyPatch(typeof(PartResource), "set_amount")]
+	internal static class Patch_PartResource_set_amount
+	{
+		private static int logLimit = 30;
+		private static void Prefix(PartResource __instance, double value)
+		{
+			if (__instance.resourceName != "Metals" || logLimit <= 0) return;
+			// Only log production (increase) or large changes
+			if (!(value - __instance.amount > 1e-6)) return;
+			logLimit--;
+			BridgeUtils.Log("[zKerbalismNative] PartResource.set_amount Metals old=" + __instance.amount
+				+ " new=" + value + " delta=" + (value - __instance.amount)
+				+ " part=" + (__instance.part != null ? __instance.part.partInfo.name : "?")
 				+ "\n" + System.Environment.StackTrace);
 		}
 	}

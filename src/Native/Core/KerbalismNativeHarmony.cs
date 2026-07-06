@@ -19,7 +19,7 @@ namespace KerbalismNative
 			// 'false' arguments below disable selected patches for troubleshooting.
 			bool enableConverterPostProcess   = true;
 			bool enableHarvesterPostProcess   = true;
-			bool enableConverterFixedUpdate   = false;
+			bool enableConverterFixedUpdate = true;
 			bool enableHarvesterFixedUpdate   = true;
 			bool enableFissionReactor         = true;
 			bool enableFissionDoCatchup       = true;

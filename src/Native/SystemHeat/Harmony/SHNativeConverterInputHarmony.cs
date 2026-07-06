@@ -87,6 +87,7 @@ namespace KerbalismNative
 	[HarmonyPatch(typeof(ModuleSystemHeatConverter), "FixedUpdateFlight")]
 	internal static class Patch_SystemHeatConverter_FixedUpdateFlight
 	{
+		private static int _diagCounter;
 		private static void Prefix(ModuleSystemHeatConverter __instance, ref SHNativeConverterInputHarmony.InputListRateBackup __state)
 		{
 			if (!SHNativeConverterInputHarmony.ShouldZeroInputs(__instance))
@@ -101,6 +102,20 @@ namespace KerbalismNative
 				return;
 
 			SHNativeConverterInputHarmony.RestoreInputList(__instance.inputList, ref __state);
+
+			if (_diagCounter < 5)
+			{
+				double metals = 0;
+				if (__instance.part != null)
+				{
+					var pr = __instance.part.Resources["Metals"];
+					if (pr != null) metals = pr.amount;
+				}
+				BridgeUtils.Log("[zKerbalismNative] FUF Postfix: " + __instance.ConverterName
+					+ " lastTimeFactor=" + __instance.lastTimeFactor
+					+ " partMetals=" + metals);
+				_diagCounter++;
+			}
 		}
 	}
 

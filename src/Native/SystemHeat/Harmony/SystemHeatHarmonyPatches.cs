@@ -3,15 +3,17 @@ using SystemHeat;
 
 namespace KerbalismNative
 {
+	/// <summary>
+	/// Prevents JIT inlining of PartResource.amount property setter into Kerbalism's
+	/// ResourceInfo.Sync loop. Without this, the JIT may cache stale PartResource.amount
+	/// values in registers, causing Sync to apply phantom production delta that the
+	/// broker has already blocked via ConvertInputAvailabilityScale.
+	/// The empty prefix exists solely as an inlining barrier — it has no side effects.
+	/// </summary>
 	[HarmonyPatch(typeof(PartResource), "set_amount")]
-	internal static class Patch_PartResource_set_amount_minimal
+	internal static class Patch_PartResource_set_amount_inlining_barrier
 	{
-		private static int _counter;
-		private static void Prefix(PartResource __instance, double value)
-		{
-			if (__instance.resourceName == "Metals" && value > __instance.amount)
-				_counter++;
-		}
+		private static void Prefix(PartResource __instance, double value) { }
 	}
 
 	[HarmonyPatch(typeof(ModuleSystemHeatFissionReactor), "HandleResourceActivities")]

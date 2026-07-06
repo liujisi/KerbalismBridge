@@ -6,73 +6,39 @@ using KerbalismBridge;
 namespace KerbalismNative
 {
 	/// <summary>
-	/// Kerbalism resource rates for native SystemHeat converter/harvester modules (resource IO blocked via Harmony).
+	/// Kerbalism resource rates for native SystemHeat converter/harvester modules
+	/// (resource IO blocked via Harmony, heat flux driven by broker state).
 	/// </summary>
 	internal static class SHNativeConverterResourceSim
 	{
-		private const string TAG = "[zKerbalismNative] ";
-
 		internal static string AddLoadedConverterRates(
 			ModuleSystemHeatConverter converter,
 			string brokerTitle,
 			Dictionary<string, double> availableResources,
 			List<KeyValuePair<string, double>> resourceChangeRequest)
 		{
+			converter.lastTimeFactor = 0.0;
+
 			if (converter == null || !converter.IsActivated || !converter.ModuleIsActive())
 				return brokerTitle;
 
-			bool diag = converter.part != null && converter.part.partInfo.name == "ELTinySmelter";
-
 			double scale = converter.GetHeatThrottle();
-			if (diag) Log("AddLoadedConverterRates " + converter.ConverterName + " moduleID=" + converter.moduleID + " heatThrottle=" + scale);
-
 			if (scale <= double.Epsilon)
-			{
-				if (diag) Log("  scale=0, skip");
 				return brokerTitle;
-			}
 
-			if (diag)
-			{
-				Log("  inputList ratios:");
-				foreach (var inp in converter.inputList)
-					Log("    " + inp.ResourceName + " ratio=" + inp.Ratio);
-			}
-
-			double inputScale = GetInputAvailabilityScale(converter.vessel, converter.inputList, availableResources, scale);
-			double finalScale = scale * inputScale;
-			if (diag) Log("  inputScale=" + inputScale + " finalScale=" + finalScale);
-
-			scale = finalScale;
+			scale *= GetInputAvailabilityScale(converter.vessel, converter.inputList, availableResources, scale);
 			if (scale <= double.Epsilon)
-			{
-				if (diag) Log("  BLOCKED: no inputs");
 				return brokerTitle;
-			}
 
-			int count = 0;
-			double efficiency = GetConverterEfficiency(converter);
+			converter.lastTimeFactor = 1.0;
+
 			foreach (ResourceRatio input in converter.inputList)
-			{
-				double qty = -input.Ratio * scale;
-				resourceChangeRequest.Add(new KeyValuePair<string, double>(input.ResourceName, qty));
-				count++;
-			}
+				resourceChangeRequest.Add(new KeyValuePair<string, double>(input.ResourceName, -input.Ratio * scale));
+
 			foreach (ResourceRatio output in converter.outputList)
-			{
-				double qty = efficiency * output.Ratio * scale;
-				resourceChangeRequest.Add(new KeyValuePair<string, double>(output.ResourceName, qty));
-				if (diag) Log("  OUTPUT " + output.ResourceName + " qty=" + qty);
-				count++;
-			}
-			if (diag) Log("  ADDED " + count + " resource requests to list");
+				resourceChangeRequest.Add(new KeyValuePair<string, double>(output.ResourceName, GetConverterEfficiency(converter) * output.Ratio * scale));
 
 			return brokerTitle;
-		}
-
-		private static void Log(string msg)
-		{
-			BridgeUtils.Log(TAG + "BROKER " + msg);
 		}
 
 		private static double GetInputAvailabilityScale(Vessel vessel, List<ResourceRatio> inputList, Dictionary<string, double> availableResources, double scale)
@@ -111,6 +77,8 @@ namespace KerbalismNative
 			Dictionary<string, double> availableResources,
 			List<KeyValuePair<string, double>> resourceChangeRequest)
 		{
+			harvester.lastTimeFactor = 0.0;
+
 			if (harvester == null || !harvester.IsActivated || !harvester.ModuleIsActive())
 				return brokerTitle;
 
@@ -119,12 +87,16 @@ namespace KerbalismNative
 			if (scale <= double.Epsilon)
 				return brokerTitle;
 
+			double abundance = BridgeUtils.SampleResourceAbundance(harvester.vessel, harvester);
+			if (abundance <= harvester.HarvestThreshold)
+				return brokerTitle;
+
+			harvester.lastTimeFactor = 1.0;
+
 			foreach (ResourceRatio input in harvester.inputList)
 				resourceChangeRequest.Add(new KeyValuePair<string, double>(input.ResourceName, -input.Ratio * scale));
 
-			double abundance = BridgeUtils.SampleResourceAbundance(harvester.vessel, harvester);
-			if (abundance > harvester.HarvestThreshold)
-				resourceChangeRequest.Add(new KeyValuePair<string, double>(harvester.ResourceName, abundance * harvester.Efficiency * scale));
+			resourceChangeRequest.Add(new KeyValuePair<string, double>(harvester.ResourceName, abundance * harvester.Efficiency * scale));
 
 			return brokerTitle;
 		}

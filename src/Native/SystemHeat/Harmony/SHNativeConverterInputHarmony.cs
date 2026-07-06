@@ -131,22 +131,24 @@ namespace KerbalismNative
 			if (module == null || module.part == null || !Lib.IsFlight())
 				return false;
 
-			SystemHeatConverterKerbalismUpdater converterUpdater =
-				module.part.FindModuleImplementing<SystemHeatConverterKerbalismUpdater>();
-			if (converterUpdater != null
-				&& module is ModuleSystemHeatConverter shConverter
-				&& converterUpdater.OwnsConverter(shConverter))
+			if (module is ModuleSystemHeatConverter shConverter)
 			{
-				return true;
+				var updaters = module.part.FindModulesImplementing<SystemHeatConverterKerbalismUpdater>();
+				for (int i = 0; i < updaters.Count; i++)
+				{
+					if (updaters[i].OwnsConverter(shConverter))
+						return true;
+				}
 			}
 
-			SystemHeatHarvesterKerbalismUpdater harvesterUpdater =
-				module.part.FindModuleImplementing<SystemHeatHarvesterKerbalismUpdater>();
-			if (harvesterUpdater != null
-				&& module is ModuleSystemHeatHarvester shHarvester
-				&& harvesterUpdater.OwnsHarvester(shHarvester))
+			if (module is ModuleSystemHeatHarvester shHarvester)
 			{
-				return true;
+				var updaters = module.part.FindModulesImplementing<SystemHeatHarvesterKerbalismUpdater>();
+				for (int i = 0; i < updaters.Count; i++)
+				{
+					if (updaters[i].OwnsHarvester(shHarvester))
+						return true;
+				}
 			}
 
 			return false;

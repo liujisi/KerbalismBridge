@@ -15,34 +15,14 @@ namespace KerbalismNative
 			patchesApplied = true;
 			var harmony = new Harmony("KerbalismNative");
 
-			bool enableConverterPostProcess   = true;
-			bool enableHarvesterPostProcess   = true;
-			bool enableConverterFixedUpdate   = true;
-			bool enableHarvesterFixedUpdate   = true;
-			bool enableFissionReactor         = true;
-			bool enableFissionDoCatchup       = true;
-			bool enableRRDiag                 = true;
+			TryPatch(harmony, typeof(Patch_FissionReactor_HandleResourceActivities), true);
+			TryPatch(harmony, typeof(Patch_FissionReactor_DoCatchup), true);
+			TryPatch(harmony, typeof(Patch_SystemHeatConverter_PostProcess), true);
+			TryPatch(harmony, typeof(Patch_SystemHeatHarvester_PostProcess), true);
+			TryPatch(harmony, typeof(Patch_SystemHeatConverter_FixedUpdateFlight), true);
+			TryPatch(harmony, typeof(Patch_SystemHeatHarvester_FixedUpdateFlight), true);
 
-			if (enableRRDiag)
-			{
-				TryPatch(harmony, typeof(Patch_Part_RequestResource_String_Double), true);
-				TryPatch(harmony, typeof(Patch_Part_RequestResource_Int_Double), true);
-				TryPatch(harmony, typeof(Patch_Part_RequestResource_String_Double_Flow_Bool), true);
-				TryPatch(harmony, typeof(Patch_Part_RequestResource_Int_Double_Flow_Bool), true);
-			}
-
-			TryPatch(harmony, typeof(Patch_FissionReactor_HandleResourceActivities), enableFissionReactor);
-			TryPatch(harmony, typeof(Patch_FissionReactor_DoCatchup), enableFissionDoCatchup);
-			TryPatch(harmony, typeof(Patch_SystemHeatConverter_PostProcess), enableConverterPostProcess);
-			TryPatch(harmony, typeof(Patch_SystemHeatHarvester_PostProcess), enableHarvesterPostProcess);
-			TryPatch(harmony, typeof(Patch_SystemHeatConverter_FixedUpdateFlight), enableConverterFixedUpdate);
-			TryPatch(harmony, typeof(Patch_SystemHeatHarvester_FixedUpdateFlight), enableHarvesterFixedUpdate);
-
-			BridgeUtils.Log("Native core Layer B Harmony patches applied (converterFUF=" + enableConverterFixedUpdate
-				+ " harvestFUF=" + enableHarvesterFixedUpdate
-				+ " convPP=" + enableConverterPostProcess
-				+ " harvPP=" + enableHarvesterPostProcess
-				+ " rrDiag=" + enableRRDiag + ")");
+			BridgeUtils.Log("Native core Layer B Harmony patches applied.");
 		}
 
 		private static void TryPatch(Harmony harmony, Type patchType, bool enabled)

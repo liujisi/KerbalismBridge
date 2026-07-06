@@ -7,135 +7,79 @@ using KerbalismBridge;
 namespace KerbalismNative
 {
 	/// <summary>
-	/// Tracks whether we are inside a Kerbalism-owned SystemHeat converter FixedUpdateFlight.
-	/// Used by PartRequestResource interceptor to detect stock converter resource IO.
+	/// While Kerbalism owns SH native converter/harvester resource IO, intercept FixedUpdateFlight
+	/// for Kerbalism-owned converters to skip stock ModuleResourceConverter resource processing,
+	/// preventing phantom production while still handling heat, overheat, and inactive-disable.
 	/// </summary>
-	internal static class KerbalismSHConverterContext
+	[HarmonyPatch(typeof(ModuleSystemHeatConverter), "FixedUpdateFlight")]
+	internal static class Patch_SystemHeatConverter_FixedUpdateFlight
 	{
-		internal static bool Active;
-		internal static string ConverterName;
-		internal static string ModuleID;
-		internal static string PartName;
-		internal static int ContextLogCounter;
-		internal static int RequestResourceLogCounter;
-
-		internal static void Enter(ModuleSystemHeatConverter c)
+		private static bool Prefix(ModuleSystemHeatConverter __instance)
 		{
-			Active = true;
-			ConverterName = c.ConverterName;
-			ModuleID = c.moduleID;
-			PartName = c.part?.partInfo?.name ?? "?";
-			if (ContextLogCounter < 10)
+			if (!SHNativeConverterInputHarmony.ShouldZeroInputs(__instance))
+				return true; // not owned by Kerbalism, let original run
+
+			// -- Replicate FixedUpdateFlight without the stock resource IO --
+			// 1. heatModule check (disable if missing)
+			var heatModule = Traverse.Create(__instance).Field("heatModule").GetValue();
+			if (heatModule == null)
 			{
-				ContextLogCounter++;
-				BridgeUtils.Log("[zKerbalismNative] CTX Enter conv=" + ConverterName + " moduleID=" + ModuleID + " part=" + PartName);
+				__instance.enabled = false;
+				return false;
 			}
-		}
 
-		internal static void Leave()
-		{
-			if (ContextLogCounter < 10)
+			// 2. Overheat check (keeps safety shutdown)
+			Traverse.Create(__instance).Method("CheckOverheat").GetValue();
+
+			// 3. Disable if inactive
+			if (!__instance.IsActivated && !__instance.AlwaysActive)
 			{
-				BridgeUtils.Log("[zKerbalismNative] CTX Leave conv=" + ConverterName + " moduleID=" + ModuleID);
+				__instance.enabled = false;
+				return false;
 			}
-			Active = false;
-			ConverterName = null;
-			ModuleID = null;
-			PartName = null;
-		}
 
-		internal static bool IsRelevant(string name)
-		{
-			return name == "Metals" || name == "ScrapMetal" || name == "LiquidFuel" || name == "Oxidizer" || name == "MetallicOre";
-		}
+			// 4. Push heat via UpdateFlux using lastTimeFactor (preserves heat management)
+			Traverse.Create(__instance).Method("UpdateFlux", __instance.lastTimeFactor).GetValue();
 
-		internal static bool IsRelevant(int id)
-		{
-			var def = PartResourceLibrary.Instance.GetDefinition(id);
-			return def != null && IsRelevant(def.name);
+			// Skip base.FixedUpdate() — no stock resource IO, no phantom production
+			return false;
 		}
 	}
 
-	[HarmonyPatch(typeof(Part), nameof(Part.RequestResource), typeof(string), typeof(double))]
-	internal static class Patch_Part_RequestResource_String_Double
+	[HarmonyPatch(typeof(ModuleSystemHeatHarvester), "FixedUpdateFlight")]
+	internal static class Patch_SystemHeatHarvester_FixedUpdateFlight
 	{
-		[HarmonyPrefix]
-		private static bool Prefix(Part __instance, string resourceName, double amount, ref double __result)
+		private static bool Prefix(ModuleSystemHeatHarvester __instance)
 		{
-			if (!KerbalismSHConverterContext.Active) return true;
-			if (KerbalismSHConverterContext.RequestResourceLogCounter < 100 && KerbalismSHConverterContext.IsRelevant(resourceName))
-			{
-				KerbalismSHConverterContext.RequestResourceLogCounter++;
-				BridgeUtils.Log("[zKerbalismNative] RR-SD " + resourceName + " amt=" + amount + " conv=" + KerbalismSHConverterContext.ConverterName + " part=" + KerbalismSHConverterContext.PartName);
-			}
-			return true;
-		}
-	}
+			if (!SHNativeConverterInputHarmony.ShouldZeroInputs(__instance))
+				return true;
 
-	[HarmonyPatch(typeof(Part), nameof(Part.RequestResource), typeof(int), typeof(double))]
-	internal static class Patch_Part_RequestResource_Int_Double
-	{
-		[HarmonyPrefix]
-		private static bool Prefix(Part __instance, int resourceID, double amount, ref double __result)
-		{
-			if (!KerbalismSHConverterContext.Active) return true;
-			if (KerbalismSHConverterContext.RequestResourceLogCounter < 100 && KerbalismSHConverterContext.IsRelevant(resourceID))
+			var heatModule = Traverse.Create(__instance).Field("heatModule").GetValue();
+			if (heatModule == null)
 			{
-				KerbalismSHConverterContext.RequestResourceLogCounter++;
-				var def = PartResourceLibrary.Instance.GetDefinition(resourceID);
-				BridgeUtils.Log("[zKerbalismNative] RR-ID " + (def?.name ?? resourceID.ToString()) + " amt=" + amount + " conv=" + KerbalismSHConverterContext.ConverterName + " part=" + KerbalismSHConverterContext.PartName);
+				__instance.enabled = false;
+				return false;
 			}
-			return true;
-		}
-	}
 
-	[HarmonyPatch(typeof(Part), nameof(Part.RequestResource), typeof(string), typeof(double), typeof(ResourceFlowMode), typeof(bool))]
-	internal static class Patch_Part_RequestResource_String_Double_Flow_Bool
-	{
-		[HarmonyPrefix]
-		private static bool Prefix(Part __instance, string resourceName, double amount, ResourceFlowMode flowMode, bool ignoreFlow, ref double __result)
-		{
-			if (!KerbalismSHConverterContext.Active) return true;
-			if (KerbalismSHConverterContext.RequestResourceLogCounter < 100 && KerbalismSHConverterContext.IsRelevant(resourceName))
-			{
-				KerbalismSHConverterContext.RequestResourceLogCounter++;
-				BridgeUtils.Log("[zKerbalismNative] RR-S4 " + resourceName + " amt=" + amount + " flow=" + flowMode + " ignoreFlow=" + ignoreFlow + " conv=" + KerbalismSHConverterContext.ConverterName + " part=" + KerbalismSHConverterContext.PartName);
-			}
-			return true;
-		}
-	}
+			Traverse.Create(__instance).Method("CheckOverheat").GetValue();
 
-	[HarmonyPatch(typeof(Part), nameof(Part.RequestResource), typeof(int), typeof(double), typeof(ResourceFlowMode), typeof(bool))]
-	internal static class Patch_Part_RequestResource_Int_Double_Flow_Bool
-	{
-		[HarmonyPrefix]
-		private static bool Prefix(Part __instance, int resourceID, double amount, ResourceFlowMode flowMode, bool ignoreFlow, ref double __result)
-		{
-			if (!KerbalismSHConverterContext.Active) return true;
-			if (KerbalismSHConverterContext.RequestResourceLogCounter < 100 && KerbalismSHConverterContext.IsRelevant(resourceID))
+			if (!__instance.IsActivated && !__instance.AlwaysActive)
 			{
-				KerbalismSHConverterContext.RequestResourceLogCounter++;
-				var def = PartResourceLibrary.Instance.GetDefinition(resourceID);
-				BridgeUtils.Log("[zKerbalismNative] RR-I4 " + (def?.name ?? resourceID.ToString()) + " amt=" + amount + " flow=" + flowMode + " ignoreFlow=" + ignoreFlow + " conv=" + KerbalismSHConverterContext.ConverterName + " part=" + KerbalismSHConverterContext.PartName);
+				__instance.enabled = false;
+				return false;
 			}
-			return true;
+
+			Traverse.Create(__instance).Method("UpdateFlux", __instance.lastTimeFactor).GetValue();
+
+			return false;
 		}
 	}
 
 	/// <summary>
-	/// While Kerbalism owns SH native converter/harvester resource IO, hide input rates from stock
-	/// ModuleResourceConverter input checks (ratio × fixedDeltaTime) so high timewarp does not stop modules.
+	/// Helper — detects if this converter/harvester is owned by Kerbalism.
 	/// </summary>
 	internal static class SHNativeConverterInputHarmony
 	{
-		internal struct InputListRateBackup
-		{
-			internal double[] Ratios;
-			internal bool Active;
-
-			internal bool HasBackup => Active && Ratios != null;
-		}
-
 		internal static bool ShouldZeroInputs(PartModule module)
 		{
 			if (module == null || module.part == null || !Lib.IsFlight())
@@ -160,86 +104,6 @@ namespace KerbalismNative
 			}
 
 			return false;
-		}
-
-		internal static InputListRateBackup ZeroInputList(List<ResourceRatio> inputList)
-		{
-			if (inputList == null || inputList.Count == 0)
-				return default;
-
-			var backup = new InputListRateBackup
-			{
-				Ratios = new double[inputList.Count],
-				Active = true
-			};
-
-			for (int i = 0; i < inputList.Count; i++)
-			{
-				ResourceRatio entry = inputList[i];
-				backup.Ratios[i] = entry.Ratio;
-				entry.Ratio = 0.0;
-				inputList[i] = entry;
-			}
-
-			return backup;
-		}
-
-		internal static void RestoreInputList(List<ResourceRatio> inputList, ref InputListRateBackup backup)
-		{
-			if (!backup.HasBackup || inputList == null)
-				return;
-
-			int count = System.Math.Min(inputList.Count, backup.Ratios.Length);
-			for (int i = 0; i < count; i++)
-			{
-				ResourceRatio entry = inputList[i];
-				entry.Ratio = backup.Ratios[i];
-				inputList[i] = entry;
-			}
-
-			backup = default;
-		}
-	}
-
-	[HarmonyPatch(typeof(ModuleSystemHeatConverter), "FixedUpdateFlight")]
-	internal static class Patch_SystemHeatConverter_FixedUpdateFlight
-	{
-		private static void Prefix(ModuleSystemHeatConverter __instance, ref SHNativeConverterInputHarmony.InputListRateBackup __state)
-		{
-			if (!SHNativeConverterInputHarmony.ShouldZeroInputs(__instance))
-				return;
-
-			KerbalismSHConverterContext.Enter(__instance);
-			__state = SHNativeConverterInputHarmony.ZeroInputList(__instance.inputList);
-		}
-
-		private static void Postfix(ModuleSystemHeatConverter __instance, ref SHNativeConverterInputHarmony.InputListRateBackup __state)
-		{
-			if (!__state.HasBackup)
-				return;
-
-			SHNativeConverterInputHarmony.RestoreInputList(__instance.inputList, ref __state);
-			KerbalismSHConverterContext.Leave();
-		}
-	}
-
-	[HarmonyPatch(typeof(ModuleSystemHeatHarvester), "FixedUpdateFlight")]
-	internal static class Patch_SystemHeatHarvester_FixedUpdateFlight
-	{
-		private static void Prefix(ModuleSystemHeatHarvester __instance, ref SHNativeConverterInputHarmony.InputListRateBackup __state)
-		{
-			if (!SHNativeConverterInputHarmony.ShouldZeroInputs(__instance))
-				return;
-
-			__state = SHNativeConverterInputHarmony.ZeroInputList(__instance.inputList);
-		}
-
-		private static void Postfix(ModuleSystemHeatHarvester __instance, ref SHNativeConverterInputHarmony.InputListRateBackup __state)
-		{
-			if (!__state.HasBackup)
-				return;
-
-			SHNativeConverterInputHarmony.RestoreInputList(__instance.inputList, ref __state);
 		}
 	}
 }

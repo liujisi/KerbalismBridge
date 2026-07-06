@@ -10,6 +10,8 @@ namespace KerbalismNative
 	/// </summary>
 	internal static class SHNativeConverterResourceSim
 	{
+		private const string TAG = "[zKerbalismNative] ";
+
 		internal static string AddLoadedConverterRates(
 			ModuleSystemHeatConverter converter,
 			string brokerTitle,
@@ -19,21 +21,58 @@ namespace KerbalismNative
 			if (converter == null || !converter.IsActivated || !converter.ModuleIsActive())
 				return brokerTitle;
 
+			bool diag = converter.part != null && converter.part.partInfo.name == "ELTinySmelter";
+
 			double scale = converter.GetHeatThrottle();
-			if (scale <= double.Epsilon)
-				return brokerTitle;
+			if (diag) Log("AddLoadedConverterRates " + converter.ConverterName + " moduleID=" + converter.moduleID + " heatThrottle=" + scale);
 
-			scale *= GetInputAvailabilityScale(converter.vessel, converter.inputList, availableResources, scale);
 			if (scale <= double.Epsilon)
+			{
+				if (diag) Log("  scale=0, skip");
 				return brokerTitle;
+			}
 
+			if (diag)
+			{
+				Log("  inputList ratios:");
+				foreach (var inp in converter.inputList)
+					Log("    " + inp.ResourceName + " ratio=" + inp.Ratio);
+			}
+
+			double inputScale = GetInputAvailabilityScale(converter.vessel, converter.inputList, availableResources, scale);
+			double finalScale = scale * inputScale;
+			if (diag) Log("  inputScale=" + inputScale + " finalScale=" + finalScale);
+
+			scale = finalScale;
+			if (scale <= double.Epsilon)
+			{
+				if (diag) Log("  BLOCKED: no inputs");
+				return brokerTitle;
+			}
+
+			int count = 0;
+			double efficiency = GetConverterEfficiency(converter);
 			foreach (ResourceRatio input in converter.inputList)
-				resourceChangeRequest.Add(new KeyValuePair<string, double>(input.ResourceName, -input.Ratio * scale));
-
+			{
+				double qty = -input.Ratio * scale;
+				resourceChangeRequest.Add(new KeyValuePair<string, double>(input.ResourceName, qty));
+				count++;
+			}
 			foreach (ResourceRatio output in converter.outputList)
-				resourceChangeRequest.Add(new KeyValuePair<string, double>(output.ResourceName, GetConverterEfficiency(converter) * output.Ratio * scale));
+			{
+				double qty = efficiency * output.Ratio * scale;
+				resourceChangeRequest.Add(new KeyValuePair<string, double>(output.ResourceName, qty));
+				if (diag) Log("  OUTPUT " + output.ResourceName + " qty=" + qty);
+				count++;
+			}
+			if (diag) Log("  ADDED " + count + " resource requests to list");
 
 			return brokerTitle;
+		}
+
+		private static void Log(string msg)
+		{
+			BridgeUtils.Log(TAG + "BROKER " + msg);
 		}
 
 		private static double GetInputAvailabilityScale(Vessel vessel, List<ResourceRatio> inputList, Dictionary<string, double> availableResources, double scale)
@@ -89,6 +128,7 @@ namespace KerbalismNative
 
 			return brokerTitle;
 		}
+
 		internal static void BackgroundUpdateConverter(
 			Vessel v,
 			ProtoPartModuleSnapshot converterSnapshot,
